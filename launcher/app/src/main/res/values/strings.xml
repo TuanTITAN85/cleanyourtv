@@ -90,4 +90,17 @@
     </plurals>
     <!-- The greeting, then greeting_name: "Good morning, Mr. Trịnh". -->
     <string name="greeting_with_name">%1$s, %2$s</string>
+    <string name="dash_most_used">Most used \u00B7 7 days</string>
+    <string name="dash_system">System</string>
+    <string name="dash_cpu_cores">CPU \u00B7 %d core</string>
+    <string name="dash_cpu_cores_only">CPU cores</string>
+    <string name="dash_uptime">Uptime</string>
+    <string name="dash_usb_debug">USB debug</string>
+    <string name="dash_no_network">No network</string>
+    <string name="dash_no_wifi">No Wi-Fi</string>
+    <string name="dash_signal">Signal</string>
+    <string name="dash_private">Private</string>
+    <string name="dash_auto">Auto</string>
+    <string name="dash_usage_hint">Usage access is off. Allow it once: adb shell appops set %1$s GET_USAGE_STATS allow</string>
+    <string name="dash_usage_empty">No usage recorded yet</string>
 </resources>

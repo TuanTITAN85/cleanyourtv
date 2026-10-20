@@ -103,6 +103,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private GlassView glass;
     private View ambient;
     private TextView heroName;
+    private Dashboard dashboard;
     private int ambientColor = -1;
     private ValueAnimator ambientAnimator;
     private boolean heroShown;
@@ -275,6 +276,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         // a fade renders it into a full-screen offscreen buffer first.
         ambient.forceHasOverlappingRendering(false);
         heroName = findViewById(R.id.heroName);
+        dashboard = new Dashboard(this, findViewById(R.id.panels), reducedMotion || !animations);
         // dock_title false: the name above the dock never shows; the glow still follows the dock.
         if (!cfg.dockTitle) heroName.setVisibility(View.GONE);
         greeting = findViewById(R.id.greeting);
@@ -551,6 +553,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sky.update();
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
+        dashboard.start();
         if (festive && diya != null) {
             diya.start();
             LocalDate today = LocalDate.now();
@@ -584,6 +587,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             heroShown = false;
             heroName.setAlpha(0f);
             ambient.setAlpha(0f);
+            dashboard.setShown(false, true);
         }
         reloadTiles();
         if (animate && animations && !reducedMotion) grid.scheduleLayoutAnimation();
@@ -647,6 +651,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroName.animate().cancel();
         ambient.animate().cancel();
         handler.removeCallbacks(minuteTick);
+        dashboard.stop();
         stopStats();
         if (diya != null) diya.stop();
         cancelPendingFocusScroll();
@@ -675,6 +680,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        dashboard.destroy();
         wallpaperPlayer.close();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -1054,6 +1060,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- top shelf -------------------------------------------------------------------------------
 
     private void showHero(int position, float dockTopInRoot) {
+        dashboard.setShown(true, false);
         String label = adapter.labelAt(position);
         int color = adapter.ambientColorAt(position);
         float y = dockTopInRoot - 14 * density - 26 * density - heroName.getHeight();
@@ -1198,6 +1205,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroName.animate().cancel();
         ambient.animate().cancel();
         heroShown = false;
+        dashboard.setShown(false, false);
         if (animations) {
             heroName.animate().alpha(0f).setDuration(reducedMotion ? 100 : 160).start();
             ambient.animate().alpha(0f).setDuration(reducedMotion ? 140 : 300).start();

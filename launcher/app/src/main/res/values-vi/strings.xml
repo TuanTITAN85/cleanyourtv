@@ -68,4 +68,17 @@
     <string name="dock_edit">Chỉnh sửa dock</string>
     <string name="dock_edit_hint">Chọn vị trí trên dock cần đổi rồi nhấn OK. Nhấn Quay lại để kết thúc.</string>
     <string name="dock_edit_pick_app">Giờ chọn ứng dụng để đặt vào đó rồi nhấn OK. Nhấn Quay lại để chọn vị trí khác.</string>
+    <string name="dash_most_used">Dùng nhiều nhất \u00B7 7 ngày</string>
+    <string name="dash_system">Hệ thống</string>
+    <string name="dash_cpu_cores">CPU \u00B7 %d nhân</string>
+    <string name="dash_cpu_cores_only">Số nhân CPU</string>
+    <string name="dash_uptime">Đã chạy</string>
+    <string name="dash_usb_debug">Gỡ lỗi USB</string>
+    <string name="dash_no_network">Không có mạng</string>
+    <string name="dash_no_wifi">Không có Wi-Fi</string>
+    <string name="dash_signal">Tín hiệu</string>
+    <string name="dash_private">Riêng tư</string>
+    <string name="dash_auto">Tự động</string>
+    <string name="dash_usage_hint">Chưa cấp quyền truy cập mức sử dụng. Cấp một lần: adb shell appops set %1$s GET_USAGE_STATS allow</string>
+    <string name="dash_usage_empty">Chưa có dữ liệu sử dụng</string>
 </resources>

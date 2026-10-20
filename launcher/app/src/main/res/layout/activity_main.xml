@@ -19,6 +19,19 @@
         android:layout_height="match_parent"
         android:alpha="0" />
 
+    <!-- Personal build: most-used apps and system cards, filled by Dashboard; faded with the top shelf. -->
+    <LinearLayout
+        android:id="@+id/panels"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="118dp"
+        android:alpha="0"
+        android:baselineAligned="false"
+        android:importantForAccessibility="no"
+        android:orientation="horizontal"
+        android:paddingStart="56dp"
+        android:paddingEnd="56dp" />
+
     <!-- Top shelf: the focused dock app's name, positioned above the dock in code. -->
     <TextView
         android:id="@+id/heroName"

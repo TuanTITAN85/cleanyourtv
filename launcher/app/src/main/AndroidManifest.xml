@@ -8,6 +8,9 @@
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Personal build: the "most used" card. Granted with
+         `appops set com.gathin.tvhome GET_USAGE_STATS allow`; without it the card says so. -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Needed since Android 10 to read the Wi-Fi network name for the network pill. Never requested at
          runtime: build-and-install grants it with pm grant, so lint's Android 12 "ask for COARSE with
