@@ -49,6 +49,7 @@
          projector remote's gear button is scancode 384 (KEY_TAPE). Find yours with
          `tools/tv.py 'getevent -lt'` while pressing the button. Leave empty to omit. -->
     <integer-array name="settings_key_scancodes">
+        <item>384</item>
     </integer-array>
     <!-- The same by Android keycode, for buttons whose scancode is shared. TCL Google TV remotes send their
          Settings button as keycode 83 (KEYCODE_NOTIFICATION, which the stock Google TV home turned into its quick
