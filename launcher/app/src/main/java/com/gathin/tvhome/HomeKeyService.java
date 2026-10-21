@@ -2,6 +2,8 @@ package com.gathin.tvhome;
 
 import android.accessibilityservice.AccessibilityService;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
@@ -26,6 +28,14 @@ public class HomeKeyService extends AccessibilityService {
     private boolean settingsPanel;
     /** The current hold on the Settings button already opened the launcher menu, so its release does nothing. */
     private boolean settingsHoldHandled;
+    private static final long HOLD_MS = 500;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable openMenu = () -> {
+        settingsHoldHandled = true;
+        startActivity(new Intent(this, MainActivity.class)
+                .setAction(MainActivity.ACTION_SETTINGS_MENU)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    };
     /** app_keys, the same map InputKeyService reads, for setups that run only this service. */
     private Map<Integer, String> appKeys = Collections.emptyMap();
 
@@ -53,14 +63,15 @@ public class HomeKeyService extends AccessibilityService {
         if (isSettingsKey(event)) {
             if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 // Hold: the launcher's own menu (launcher settings, dock, reorder). A tap still opens Settings.
-                if (!settingsHoldHandled && (event.isLongPress() || event.getRepeatCount() > 0)) {
-                    settingsHoldHandled = true;
-                    startActivity(new Intent(this, MainActivity.class)
-                            .setAction(MainActivity.ACTION_SETTINGS_MENU)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                // This key sends no repeat events to an accessibility service, so time the hold ourselves.
+                if (event.getRepeatCount() == 0) {
+                    settingsHoldHandled = false;
+                    handler.removeCallbacks(openMenu);
+                    handler.postDelayed(openMenu, HOLD_MS);
                 }
                 return true;
             }
+            handler.removeCallbacks(openMenu);
             boolean handled = settingsHoldHandled;
             settingsHoldHandled = false;
             if (!handled && event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
