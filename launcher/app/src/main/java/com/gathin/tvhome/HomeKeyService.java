@@ -24,6 +24,8 @@ public class HomeKeyService extends AccessibilityService {
     private int[] settingsScancodes = new int[0];
     private int[] settingsKeycodes = new int[0];
     private boolean settingsPanel;
+    /** The current hold on the Settings button already opened the launcher menu, so its release does nothing. */
+    private boolean settingsHoldHandled;
     /** app_keys, the same map InputKeyService reads, for setups that run only this service. */
     private Map<Integer, String> appKeys = Collections.emptyMap();
 
@@ -49,7 +51,19 @@ public class HomeKeyService extends AccessibilityService {
     protected boolean onKeyEvent(KeyEvent event) {
         // The stock launcher handled the remote's Settings button; with it disabled the button does nothing.
         if (isSettingsKey(event)) {
-            if (event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                // Hold: the launcher's own menu (launcher settings, dock, reorder). A tap still opens Settings.
+                if (!settingsHoldHandled && (event.isLongPress() || event.getRepeatCount() > 0)) {
+                    settingsHoldHandled = true;
+                    startActivity(new Intent(this, MainActivity.class)
+                            .setAction(MainActivity.ACTION_SETTINGS_MENU)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                }
+                return true;
+            }
+            boolean handled = settingsHoldHandled;
+            settingsHoldHandled = false;
+            if (!handled && event.getAction() == KeyEvent.ACTION_UP && !event.isCanceled()) {
                 Intent open = settingsPanel ? new Intent(this, QuickSettingsActivity.class)
                         : new Intent(Settings.ACTION_SETTINGS);
                 startActivity(open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));

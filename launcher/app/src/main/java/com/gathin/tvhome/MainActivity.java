@@ -85,6 +85,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static final int LAUNCHER_SETTINGS_REQUEST = 42;
     /** Sent by QuickSettingsActivity: open Launcher settings from here so Home rebuilds when they close. */
     static final String ACTION_LAUNCHER_SETTINGS = "com.gathin.tvhome.action.LAUNCHER_SETTINGS";
+    /** Hold on the remote's Settings button: HomeKeyService brings Home forward with the launcher menu open. */
+    static final String ACTION_SETTINGS_MENU = "com.gathin.tvhome.action.SETTINGS_MENU";
     /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
     static int COLUMNS = 4;
     private boolean rtlAppGrid;
@@ -515,6 +517,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         if (openLauncherSettingsIfAsked(intent)) return;
+        if (intent != null && ACTION_SETTINGS_MENU.equals(intent.getAction())) {
+            setIntent(new Intent(Intent.ACTION_MAIN));
+            root.post(this::showSettingsMenu);
+            return;
+        }
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
         grid.scrollToPosition(0);
         lastFocused = 0;
