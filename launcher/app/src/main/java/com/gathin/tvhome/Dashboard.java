@@ -325,11 +325,21 @@ final class Dashboard {
         }
         long now = System.currentTimeMillis();
         UsageStatsManager usm = (UsageStatsManager) ctx.getSystemService(Context.USAGE_STATS_SERVICE);
-        Map<String, UsageStats> stats = usm.queryAndAggregateUsageStats(now - WEEK_MS, now);
+        // Add up the daily buckets ourselves instead of queryAndAggregateUsageStats: that call picks one bucket size
+        // for the whole week, and after the TV's clock has jumped the weekly/yearly buckets can be unusable (shifted
+        // into the future, or inflated) while the daily ones are right.
+        Map<String, Long> foreground = new HashMap<>();
+        List<UsageStats> days = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - WEEK_MS, now);
+        if (days != null) {
+            for (UsageStats us : days) {
+                if (us.getFirstTimeStamp() > now) continue;             // a bucket from the future is a clock artefact
+                foreground.merge(us.getPackageName(), us.getTotalTimeInForeground(), Long::sum);
+            }
+        }
         long total = 0;
         for (Map.Entry<String, String> e : launchable.entrySet()) {
-            UsageStats us = stats.get(e.getKey());
-            long ms = us == null ? 0 : us.getTotalTimeInForeground();
+            Long fg = foreground.get(e.getKey());
+            long ms = fg == null ? 0 : fg;
             if (ms <= 0) continue;
             rows.add(new Row(e.getValue(), ms));
             total += ms;
