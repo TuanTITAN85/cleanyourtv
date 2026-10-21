@@ -59,7 +59,9 @@ import java.util.concurrent.Executors;
  */
 final class Dashboard {
     private static final long TICK_MS = 5_000L;
-    private static final int USAGE_EVERY_TICKS = 12;                 // 12 x 5 s = 1 min
+    private static final int USAGE_EVERY_TICKS = 60;                 // 60 x 5 s = 5 min
+    private static final long MIN_USAGE_GAP_MS = 20_000L;
+    private static final int NETWORK_EVERY_TICKS = 3;                // 3 x 5 s = 15 s
     private static final long WEEK_MS = 7L * 24 * 60 * 60 * 1000;
     private static final int TOP_APPS = 5;
     /** What WifiInfo reports when there is no signal reading (its own constant is not public API). */
@@ -78,6 +80,9 @@ final class Dashboard {
     private final Typeface font;
 
     private boolean shown;
+    private boolean usageLoaded;
+    private boolean usageBusy;
+    private long lastUsageAt;
     private boolean running;
     private int tick;
     private String adbPort = "";
@@ -97,8 +102,11 @@ final class Dashboard {
         @Override
         public void run() {
             if (!running) return;
-            if (shown) refreshSystem();
-            if (tick++ % USAGE_EVERY_TICKS == 0) refreshUsage();
+            if (shown) {
+                refreshSystem(tick % NETWORK_EVERY_TICKS == 0);
+                if (!usageLoaded || tick % USAGE_EVERY_TICKS == 0) refreshUsage();
+            }
+            tick++;
             handler.postDelayed(this, TICK_MS);
         }
     };
@@ -119,6 +127,7 @@ final class Dashboard {
         if (running) return;
         running = true;
         tick = 0;
+        usageLoaded = false;                                // back from an app: refresh on the next show
         io.execute(() -> {                                  // `getprop` spawns a process: once, off the UI thread
             String port = readProp("service.adb.tcp.port");
             handler.post(() -> adbPort = port);
@@ -146,12 +155,15 @@ final class Dashboard {
         } else {
             panels.animate().alpha(show ? 1f : 0f).setDuration(show ? 260 : 160).start();
         }
-        if (show && running) refreshSystem();
+        if (show && running) {
+            refreshSystem(true);
+            if (!usageLoaded) refreshUsage();
+        }
     }
 
     // ---- system card -----------------------------------------------------------------------------
 
-    private void refreshSystem() {
+    private void refreshSystem(boolean withNetwork) {
         int cores = Runtime.getRuntime().availableProcessors();
 
         long mhz = cpuMhz(cores);
@@ -173,7 +185,7 @@ final class Dashboard {
 
         uptime.set(duration(SystemClock.elapsedRealtime(), true), ctx.getString(R.string.dash_uptime), -1f);
 
-        refreshNetwork();
+        if (withNetwork) refreshNetwork();
 
         boolean adbOn = Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.ADB_ENABLED, 0) == 1;
         adb.set(adbOn ? "ON" + (adbPort.isEmpty() ? "" : " :" + adbPort) : "OFF", ctx.getString(R.string.dash_usb_debug), -1f);
@@ -270,33 +282,60 @@ final class Dashboard {
     }
 
     private void refreshUsage() {
-        io.execute(() -> {
-            final boolean allowed = hasUsageAccess();
-            final List<Row> rows = new ArrayList<>();
-            long total = 0;
-            if (allowed) {
-                PackageManager pm = ctx.getPackageManager();
-                Map<String, String> launchable = new HashMap<>();
-                Intent probe = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
-                for (ResolveInfo ri : pm.queryIntentActivities(probe, 0)) {
-                    String pkg = ri.activityInfo.packageName;
-                    if (!pkg.equals(ctx.getPackageName())) launchable.put(pkg, String.valueOf(ri.loadLabel(pm)));
+        long nowMs = SystemClock.elapsedRealtime();
+        // One read at a time, and not more often than every 20 s however often Home is re-entered.
+        if (usageBusy || (lastUsageAt != 0 && nowMs - lastUsageAt < MIN_USAGE_GAP_MS)) return;
+        usageBusy = true;
+        lastUsageAt = nowMs;
+        try {
+            io.execute(() -> {
+                boolean ok = false;
+                List<Row> rows = new ArrayList<>();
+                long total = 0;
+                try {
+                    ok = hasUsageAccess();
+                    if (ok) total = readUsage(rows);
+                } catch (RuntimeException e) {                 // e.g. access revoked while reading
+                    ok = false;
+                    rows.clear();
+                    total = 0;
                 }
-                long now = System.currentTimeMillis();
-                UsageStatsManager usm = (UsageStatsManager) ctx.getSystemService(Context.USAGE_STATS_SERVICE);
-                Map<String, UsageStats> stats = usm.queryAndAggregateUsageStats(now - WEEK_MS, now);
-                for (Map.Entry<String, String> e : launchable.entrySet()) {
-                    UsageStats us = stats.get(e.getKey());
-                    long ms = us == null ? 0 : us.getTotalTimeInForeground();
-                    if (ms <= 0) continue;
-                    rows.add(new Row(e.getValue(), ms));
-                    total += ms;
-                }
-                Collections.sort(rows, (a, b) -> Long.compare(b.ms, a.ms));
-            }
-            final long sum = total;
-            handler.post(() -> showUsage(allowed, rows, sum));
-        });
+                final boolean allowed = ok;
+                final long sum = total;
+                final List<Row> result = rows;
+                handler.post(() -> {
+                    usageLoaded = true;
+                    usageBusy = false;                          // always released, or the card would never refresh again
+                    showUsage(allowed, result, sum);
+                });
+            });
+        } catch (RuntimeException e) {                         // executor already shut down
+            usageBusy = false;
+        }
+    }
+
+    /** Fills {@code rows} with the launchable apps used in the last 7 days, most used first; returns their total. */
+    private long readUsage(List<Row> rows) {
+        PackageManager pm = ctx.getPackageManager();
+        Map<String, String> launchable = new HashMap<>();
+        Intent probe = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);
+        for (ResolveInfo ri : pm.queryIntentActivities(probe, 0)) {
+            String pkg = ri.activityInfo.packageName;
+            if (!pkg.equals(ctx.getPackageName())) launchable.put(pkg, String.valueOf(ri.loadLabel(pm)));
+        }
+        long now = System.currentTimeMillis();
+        UsageStatsManager usm = (UsageStatsManager) ctx.getSystemService(Context.USAGE_STATS_SERVICE);
+        Map<String, UsageStats> stats = usm.queryAndAggregateUsageStats(now - WEEK_MS, now);
+        long total = 0;
+        for (Map.Entry<String, String> e : launchable.entrySet()) {
+            UsageStats us = stats.get(e.getKey());
+            long ms = us == null ? 0 : us.getTotalTimeInForeground();
+            if (ms <= 0) continue;
+            rows.add(new Row(e.getValue(), ms));
+            total += ms;
+        }
+        Collections.sort(rows, (x, y) -> Long.compare(y.ms, x.ms));
+        return total;
     }
 
     private void showUsage(boolean allowed, List<Row> rows, long total) {
@@ -471,23 +510,28 @@ final class Dashboard {
      * framework's uniform autosizing did not shrink these single-line, ellipsized values.
      */
     private void fit(TextView tv) {
-        final float max = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 16, ctx.getResources().getDisplayMetrics());
-        final float min = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11, ctx.getResources().getDisplayMetrics());
-        final float step = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 0.5f, ctx.getResources().getDisplayMetrics());
-        tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, max);
-        tv.post(() -> {
-            float avail = tv.getWidth() - tv.getPaddingLeft() - tv.getPaddingRight();
-            if (avail <= 0) return;
-            Paint p = new Paint(tv.getPaint());
-            String text = tv.getText().toString();
-            float size = max;
-            while (size > min) {
-                p.setTextSize(size);
-                if (p.measureText(text) <= avail) break;
-                size -= step;
-            }
-            tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, Math.max(min, size));
-        });
+        float avail = tv.getWidth() - tv.getPaddingLeft() - tv.getPaddingRight();
+        if (avail <= 0) {                                     // not laid out yet: try once after the first layout
+            tv.post(() -> {
+                if (tv.getWidth() > 0) fit(tv);
+            });
+            return;
+        }
+        final android.util.DisplayMetrics dm = ctx.getResources().getDisplayMetrics();
+        final float max = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 16, dm);
+        final float min = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11, dm);
+        final float step = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 0.5f, dm);
+        Paint p = new Paint(tv.getPaint());
+        String text = tv.getText().toString();
+        float size = max;
+        while (size > min) {
+            p.setTextSize(size);
+            if (p.measureText(text) <= avail) break;
+            size -= step;
+        }
+        size = Math.max(min, size);
+        // Never set the full size first and shrink later: that shows one frame of cut text on every refresh.
+        if (Math.abs(tv.getTextSize() - size) > 0.5f) tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, size);
     }
 
     /** One number with a caption under it and an optional thin bar. */
@@ -496,9 +540,11 @@ final class Dashboard {
         Bar bar;
 
         void set(String v, String l, float fraction) {
-            value.setText(v);
-            fit(value);
-            label.setText(l);
+            if (!v.contentEquals(value.getText())) {          // an unchanged value must not relayout the cell
+                value.setText(v);
+                fit(value);
+            }
+            if (!l.contentEquals(label.getText())) label.setText(l);
             if (fraction >= 0f) {
                 bar.setVisibility(View.VISIBLE);
                 bar.setFraction(fraction);
